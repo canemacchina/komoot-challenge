@@ -1,0 +1,120 @@
+- name: Get VPC
+  amazon.aws.ec2_vpc_net_info:
+    filters:
+      is-default: true
+  register: vpc
+
+- name: Get subnet
+  amazon.aws.ec2_vpc_subnet_info:
+    filters:
+      vpc-id: "{{ vpc.vpcs[0].id }}"
+  register: subnet
+
+- name: Create security group
+  ec2_group:
+    name: "{{ security_group_name }}"
+    description: "demo security group"
+    vpc_id: "{{ vpc.vpcs[0].id }}"
+    rules:
+      - proto: all
+        group_name: "{{ security_group_name }}"
+    rules_egress:
+      - proto: all
+        cidr_ip: 0.0.0.0/0
+  register: sg
+
+- name: Create log group
+  cloudwatchlogs_log_group:
+    log_group_name: /ecs/test-log-group
+
+- name: Create dynamo table
+  dynamodb_table:
+    name: "{{ dynamo_db_table }}"
+    hash_key_name: pkey
+    hash_key_type: STRING
+    range_key_name: id
+    range_key_type: NUMBER
+
+- name: Create SQS queue
+  ansible.builtin.command: aws sqs create-queue --queue-name "{{ sqs_queue_name }}"
+  register: sqsUrl
+
+- name: Get SQS queue arn
+  ansible.builtin.command: aws sqs get-queue-attributes --queue-url "{{ (sqsUrl.stdout | from_json).QueueUrl }}" --attribute-names QueueArn
+  register: sqsArn
+
+- name: Set SendMessage policy to SQS queue
+  sqs_queue:
+    name: "{{ sqs_queue_name }}"
+    policy:
+      Statement:
+        Effect: Allow
+        Principal:
+          Service: sns.amazonaws.com
+        Action:
+          - SQS:SendMessage
+        Resource: "{{ (sqsArn.stdout | from_json).Attributes.QueueArn }}"
+        Condition:
+          ArnEquals:
+            aws:SourceArn: "{{ sns_queue_arn }}"
+
+- name: Subscribe SQS to SNS topic
+  community.aws.sns_topic:
+    name: "{{ sns_queue_arn }}"
+    subscriptions:
+      - endpoint: "{{ (sqsArn.stdout | from_json).Attributes.QueueArn }}"
+        protocol: "sqs"
+
+- name: Create task definition
+  ecs_taskdefinition:
+    execution_role_arn: "{{ execution_role }}"
+    launch_type: FARGATE
+    cpu: "256"
+    memory: "512"
+    network_mode: awsvpc
+    containers:
+      - name: "{{ task_name }}"
+        essential: true
+        image: "{{ repo.repository.repositoryUri }}:latest"
+        portMappings:
+          - containerPort: "8080"
+            hostPort: "8080"
+            protocol: "tcp"
+        environment:
+          - name: AWS_ACCESS_KEY_ID
+            value: "{{ aws_access_key_id }}"
+          - name: AWS_SECRET_ACCESS_KEY
+            value: "{{ aws_secret_access_key }}"
+          - name: SQS_QUEUE_URL
+            value: "{{ (sqsUrl.stdout | from_json).QueueUrl }}"
+        logConfiguration:
+          logDriver: awslogs
+          options:
+            awslogs-group: /ecs/test-log-group
+            awslogs-region: "{{ aws_region }}"
+            awslogs-stream-prefix: ecs
+    state: present
+    family: "{{ task_name }}"
+  tags:
+    - task
+
+- name: Create cluster
+  ecs_cluster:
+    name: "{{ cluster_name }}"
+    state: present
+
+- name: Create service
+  ecs_service:
+    state: present
+    launch_type: FARGATE
+    name: "{{ service_name }}"
+    cluster: "{{ cluster_name }}"
+    task_definition: "{{ task_name }}"
+    desired_count: 1
+    network_configuration:
+      security_groups:
+        - "{{ sg.group_id }}"
+      subnets:
+        - "{{ subnet.subnets[0].id }}"
+      assign_public_ip: yes
+  register: service

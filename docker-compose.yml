@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+
+  dynamodb:
+    command: "-jar DynamoDBLocal.jar -sharedDb"
+    image: "amazon/dynamodb-local:1.11.477"
+    ports:
+      - "8000:8000"
+    volumes:
+      - "./docker/volumes/dynamodb:/home/dynamodblocal/data"
+    working_dir: /home/dynamodblocal
+    networks:
+      - default-nw
+
+  sqs:
+    image: roribio16/alpine-sqs:latest
+    ports:
+      - "9324:9324"
+      - "9325:9325"
+    volumes:
+      - ./docker/sqs/elasticmq.conf:/opt/custom/elasticmq.conf
+    networks:
+      - default-nw
+    healthcheck:
+      test: "netstat -ltnp | grep '9324' || exit 1"
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  sns:
+    image: s12v/sns
+    ports:
+      - "9911:9911"
+    networks:
+      - default-nw
+    volumes:
+      - ./docker/sns/db.json:/etc/sns/db.json
+    depends_on:
+      sqs:
+        condition: service_healthy
+
+networks:
+  default-nw:

@@ -1,0 +1,12 @@
+aws_region: "{{ lookup('ansible.builtin.env', 'AWS_REGION') }}"
+aws_account: "{{ lookup('ansible.builtin.env', 'AWS_ACCOUNT') }}"
+aws_access_key_id: "{{ lookup('ansible.builtin.env', 'AWS_ACCESS_KEY_ID') }}"
+aws_secret_access_key: "{{ lookup('ansible.builtin.env', 'AWS_SECRET_ACCESS_KEY') }}"
+dynamo_db_table: users
+security_group_name: komoot_challenge
+task_name: komoot_challenge
+execution_role: arn:aws:iam::{{ aws_account }}:role/ecsTaskExecutionRole
+service_name: komoot_challenge
+cluster_name: komoot_challenge
+sns_queue_arn: arn:aws:sns:{{ aws_region }}:{{ aws_account }}:challenge-backend-signups
+sqs_queue_name: sns-receiver

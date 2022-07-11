@@ -1,0 +1,19 @@
+- name: Create ECR repo
+  ecs_ecr:
+    name: "{{ ecr_repo_name }}"
+  register: repo
+
+- name: Get ECR login password
+  ansible.builtin.command: aws ecr get-login-password
+  register: ecrPass
+
+- name: Docker login to ECR
+  ansible.builtin.command: docker login --username AWS --password {{ ecrPass.stdout }} {{ repo.repository.repositoryUri }}
+
+- name: Build docker image
+  ansible.builtin.command: ./mvnw clean package -Dquarkus.container-image.build=true -Dquarkus.container-image.image={{ repo.repository.repositoryUri }}
+  args:
+    chdir: ../
+
+- name: Push docker image to ECR
+  ansible.builtin.command: docker push {{ repo.repository.repositoryUri }}
