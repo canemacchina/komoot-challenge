@@ -11,11 +11,11 @@ import io.mockk.verify
 import it.lorenzobugiani.domain.entity.User
 import it.lorenzobugiani.domain.service.WelcomeMessageService
 import java.net.URI
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.testcontainers.containers.BindMode
 import org.testcontainers.containers.GenericContainer
+import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
@@ -26,13 +26,18 @@ import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest
 @Testcontainers
 internal class SQSMessageReaderTest {
 
-    private val sqsContainer =
-        GenericContainer("roribio16/alpine-sqs:latest").withExposedPorts(9324)
-            .withFileSystemBind(
-                "./docker/sqs/elasticmq.conf",
-                "/opt/custom/elasticmq.conf",
-                BindMode.READ_ONLY
-            )
+    companion object {
+        @JvmStatic
+        @Container
+        private val sqsContainer =
+            GenericContainer("roribio16/alpine-sqs:latest")
+                .withExposedPorts(9324)
+                .withFileSystemBind(
+                    "./docker/sqs/elasticmq.conf",
+                    "/opt/custom/elasticmq.conf",
+                    BindMode.READ_ONLY
+                )
+    }
 
     private val mapper =
         jacksonObjectMapper().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
@@ -45,15 +50,9 @@ internal class SQSMessageReaderTest {
 
     @BeforeEach
     fun setUp() {
-        sqsContainer.start()
         sqsClient = spyk(getSqsClient())
         queueUrl = "http://${sqsContainer.host}:${sqsContainer.firstMappedPort}/queue/default"
         reader = SQSMessageReader(queueUrl, sqsClient, mapper, welcomeMessageService)
-    }
-
-    @AfterEach
-    fun tearDown() {
-        sqsContainer.stop()
     }
 
     @Test
@@ -117,6 +116,5 @@ internal class SQSMessageReaderTest {
 
     private fun getMessage(id: Long, name: String) =
         "{\"MessageId\":\"9c63e4a7-18ed-4aaf-a9d4-abb8c213c39b\",\"Message\":\"{ \\\"name\\\": \\\"$name\\\", \\\"id\\\": $id, \\\"created_at\\\": \\\"2020-05-12T16:11:54.000\\\" }\",\"Type\":\"Notification\"}"
-
 
 }

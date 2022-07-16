@@ -5,7 +5,6 @@ import com.github.tomakehurst.wiremock.client.WireMock
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager
 import java.util.Collections
 
-
 class WireMockExtensions : QuarkusTestResourceLifecycleManager {
     private var wireMockServer: WireMockServer? = null
     override fun start(): Map<String, String> {

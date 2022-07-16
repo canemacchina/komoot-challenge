@@ -9,7 +9,6 @@ import it.lorenzobugiani.domain.usecase.SaveUser
 import javax.enterprise.context.ApplicationScoped
 import javax.enterprise.inject.Produces
 
-//@Dependent
 @ApplicationScoped
 class DomainBeanProducer {
 

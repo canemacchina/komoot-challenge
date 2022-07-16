@@ -4,9 +4,11 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import it.lorenzobugiani.DynamoDbUtils
 import it.lorenzobugiani.domain.entity.User
 import it.lorenzobugiani.domain.repository.UserRepository
 import java.net.URI
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.testcontainers.containers.GenericContainer
@@ -16,56 +18,32 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
-import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition
-import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest
-import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement
-import software.amazon.awssdk.services.dynamodb.model.KeyType
-import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput
-import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType
 
 
 @Testcontainers
 internal class DynamoDbRepositoryTest {
 
-    @Container
-    private val dynamoDbContainer =
-        GenericContainer("amazon/dynamodb-local:1.11.477").withExposedPorts(8000)
+    companion object {
+        @JvmStatic
+        @Container
+        private val dynamoDbContainer =
+            GenericContainer("amazon/dynamodb-local:1.11.477")
+                .withExposedPorts(8000)
+    }
+
     private lateinit var dynamoDbClient: DynamoDbClient
     private lateinit var repository: UserRepository
 
     @BeforeEach
     fun setupDynamoClient() {
         dynamoDbClient = getDynamoClient()
-        dynamoDbClient.createTable(
-            CreateTableRequest.builder()
-                .keySchema(
-                    KeySchemaElement.builder()
-                        .keyType(KeyType.HASH)
-                        .attributeName("pkey")
-                        .build(),
-                    KeySchemaElement.builder()
-                        .keyType(KeyType.RANGE)
-                        .attributeName("id")
-                        .build()
-                )
-                .attributeDefinitions(
-                    AttributeDefinition.builder()
-                        .attributeName("pkey")
-                        .attributeType(ScalarAttributeType.S)
-                        .build(),
-                    AttributeDefinition.builder()
-                        .attributeName("id")
-                        .attributeType(ScalarAttributeType.N)
-                        .build()
-                )
-                .provisionedThroughput(
-                    ProvisionedThroughput.builder().readCapacityUnits(1).writeCapacityUnits(1)
-                        .build()
-                )
-                .tableName("users")
-                .build()
-        )
+        DynamoDbUtils.initDb(dynamoDbClient)
         repository = DynamoDbRepository(dynamoDbClient, "users")
+    }
+
+    @AfterEach
+    fun tearDown() {
+        DynamoDbUtils.cleanDb(dynamoDbClient);
     }
 
     @Test
